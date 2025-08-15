@@ -2,16 +2,33 @@ import { RoomSnapshot, TLSocketRoom } from '@tldraw/sync-core'
 import {
 	TLRecord,
 	createTLSchema,
-	// defaultBindingSchemas,
+	defaultBindingSchemas,
 	defaultShapeSchemas,
 } from '@tldraw/tlschema'
+import { T } from '@tldraw/validate'
 import { AutoRouter, IRequest, error } from 'itty-router'
 import throttle from 'lodash.throttle'
 
-// add custom shapes and bindings here if needed:
+// Define Miyagi custom shapes schema for server validation
+const miyagiWidgetShapeSchema = {
+	props: {
+		w: T.number,
+		h: T.number,
+		widgetId: T.string,
+		templateId: T.string,
+		htmlContent: T.string,
+		color: T.string,
+	},
+	// migrations property is optional, can be omitted for simple shapes
+}
+
+// Create schema with custom shapes and default shapes
 const schema = createTLSchema({
-	shapes: { ...defaultShapeSchemas },
-	// bindings: { ...defaultBindingSchemas },
+	shapes: { 
+		...defaultShapeSchemas,
+		'miyagi-widget': miyagiWidgetShapeSchema,
+	},
+	bindings: { ...defaultBindingSchemas },
 })
 
 // each whiteboard room is hosted in a DurableObject:
@@ -21,6 +38,8 @@ const schema = createTLSchema({
 // handles websocket connections. periodically, it persists the room state to the R2 bucket.
 export class TldrawDurableObject {
 	private r2: R2Bucket
+	// TEMPORARILY DISABLED FOR TESTING
+	// private miyagiApiUrl: string
 	// the room ID will be missing while the room is being initialized
 	private roomId: string | null = null
 	// when we load the room from the R2 bucket, we keep it here. it's a promise so we only ever
@@ -32,6 +51,8 @@ export class TldrawDurableObject {
 		env: Env
 	) {
 		this.r2 = env.TLDRAW_BUCKET
+		// TEMPORARILY DISABLED FOR TESTING
+		// this.miyagiApiUrl = env.MIYAGI_API_URL || 'http://localhost:3001'
 
 		ctx.blockConcurrencyWhile(async () => {
 			this.roomId = ((await this.ctx.storage.get('roomId')) ?? null) as string | null
@@ -63,8 +84,19 @@ export class TldrawDurableObject {
 	// what happens when someone tries to connect to this room?
 	async handleConnect(request: IRequest) {
 		// extract query params from request
-		const sessionId = request.query.sessionId as string
-		if (!sessionId) return error(400, 'Missing sessionId')
+		const userId = request.query.userId as string
+		if (!userId) return error(400, 'Missing userId')
+
+		// TEMPORARILY DISABLED AUTH FOR TESTING
+		// extract auth token from headers
+		// const authToken = request.headers.get('authorization')
+		// if (!authToken) return error(401, 'Missing authorization header')
+
+		// validate the user session against Miyagi auth system
+		// const authResult = await this.validateUserSession(authToken, this.roomId!, userId)
+		// if (!authResult.valid) {
+		// 	return error(401, 'Invalid session or insufficient permissions')
+		// }
 
 		// Create the websocket pair for the client
 		const { 0: clientWebSocket, 1: serverWebSocket } = new WebSocketPair()
@@ -73,8 +105,11 @@ export class TldrawDurableObject {
 		// load the room, or retrieve it if it's already loaded
 		const room = await this.getRoom()
 
-		// connect the client to the room
-		room.handleSocketConnect({ sessionId, socket: serverWebSocket })
+		// connect the client to the room with user information
+		room.handleSocketConnect({ 
+			sessionId: userId, // Use userId as sessionId for testing
+			socket: serverWebSocket 
+		})
 
 		// return the websocket connection to the client
 		return new Response(null, { status: 101, webSocket: clientWebSocket })
@@ -119,4 +154,36 @@ export class TldrawDurableObject {
 		const snapshot = JSON.stringify(room.getCurrentSnapshot())
 		await this.r2.put(`rooms/${this.roomId}`, snapshot)
 	}, 10_000)
+
+	/**
+	 * Validate user session against Miyagi auth system
+	 * TEMPORARILY DISABLED FOR TESTING
+	 */
+	// private async validateUserSession(
+	// 	authToken: string, 
+	// 	roomId: string, 
+	// 	sessionId: string
+	// ): Promise<{ valid: boolean; userId?: string }> {
+	// 	try {
+	// 		const response = await fetch(`${this.miyagiApiUrl}/api/auth/validate-canvas-access`, {
+	// 			method: 'POST',
+	// 			headers: {
+	// 				'Authorization': authToken,
+	// 				'Content-Type': 'application/json'
+	// 			},
+	// 			body: JSON.stringify({ roomId, sessionId })
+	// 		})
+
+	// 		if (!response.ok) {
+	// 			console.log(`Auth validation failed: ${response.status} ${response.statusText}`)
+	// 			return { valid: false }
+	// 		}
+
+	// 		const data = await response.json() as { userId: string }
+	// 		return { valid: true, userId: data.userId }
+	// 	} catch (error) {
+	// 		console.error('Auth validation error:', error)
+	// 		return { valid: false }
+	// 	}
+	// }
 }
