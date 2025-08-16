@@ -22,11 +22,35 @@ const miyagiWidgetShapeSchema = {
 	// migrations property is optional, can be omitted for simple shapes
 }
 
+// Block mode shapes
+const widgetBlockShapeSchema = {
+	props: {
+		w: T.number,
+		h: T.number,
+		blockType: T.string,
+		columnSpan: T.optional(T.number),
+		content: T.optional(T.any),
+		widgetId: T.string,
+	},
+}
+
+const freeformBlockShapeSchema = {
+	props: {
+		w: T.number,
+		h: T.number,
+		blockType: T.string,
+		columnSpan: T.optional(T.number),
+		content: T.optional(T.any),
+	},
+}
+
 // Create schema with custom shapes and default shapes
 const schema = createTLSchema({
 	shapes: { 
 		...defaultShapeSchemas,
 		'miyagi-widget': miyagiWidgetShapeSchema,
+		'widget-block': widgetBlockShapeSchema,
+		'freeform-block': freeformBlockShapeSchema,
 	},
 	bindings: { ...defaultBindingSchemas },
 })
