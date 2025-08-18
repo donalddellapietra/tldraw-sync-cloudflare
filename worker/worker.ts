@@ -20,6 +20,45 @@ const router = AutoRouter<IRequest, [env: Env, ctx: ExecutionContext]>({
 		return room.fetch(request.url, { headers: request.headers, body: request.body })
 	})
 
+	// Canvas tool routes - POST routes first to avoid conflicts
+	.get('/api/canvas/:roomId/get-pages', (request, env) => {
+		const id = env.TLDRAW_DURABLE_OBJECT.idFromName(request.params.roomId)
+		const room = env.TLDRAW_DURABLE_OBJECT.get(id)
+		return room.fetch(request.url, { headers: request.headers, body: request.body })
+	})
+	.get('/api/canvas/:roomId/get-widgets', (request, env) => {
+		const id = env.TLDRAW_DURABLE_OBJECT.idFromName(request.params.roomId)
+		const room = env.TLDRAW_DURABLE_OBJECT.get(id)
+		return room.fetch(request.url, { headers: request.headers, body: request.body })
+	})
+	.post('/api/canvas/:roomId/add-widget', (request, env) => {
+		const id = env.TLDRAW_DURABLE_OBJECT.idFromName(request.params.roomId)
+		const room = env.TLDRAW_DURABLE_OBJECT.get(id)
+		return room.fetch(new Request(request.url, {
+			method: request.method,
+			headers: request.headers,
+			body: request.body
+		}))
+	})
+	.post('/api/canvas/:roomId/generate-widget', (request, env) => {
+		const id = env.TLDRAW_DURABLE_OBJECT.idFromName(request.params.roomId)
+		const room = env.TLDRAW_DURABLE_OBJECT.get(id)
+		return room.fetch(new Request(request.url, {
+			method: request.method,
+			headers: request.headers,
+			body: request.body
+		}))
+	})
+	.put('/api/canvas/:roomId/edit-widget/:shapeId', (request, env) => {
+		const id = env.TLDRAW_DURABLE_OBJECT.idFromName(request.params.roomId)
+		const room = env.TLDRAW_DURABLE_OBJECT.get(id)
+		return room.fetch(new Request(request.url, {
+			method: request.method,
+			headers: request.headers,
+			body: request.body
+		}))
+	})
+
 	// assets can be uploaded to the bucket under /uploads:
 	.post('/api/uploads/:uploadId', handleAssetUpload)
 

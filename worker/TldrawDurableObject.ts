@@ -8,6 +8,7 @@ import {
 import { T } from '@tldraw/validate'
 import { AutoRouter, IRequest, error } from 'itty-router'
 import throttle from 'lodash.throttle'
+import { CanvasToolHandler } from './CanvasToolHandler'
 
 // Define Miyagi custom shapes schema for server validation
 const miyagiWidgetShapeSchema = {
@@ -18,8 +19,19 @@ const miyagiWidgetShapeSchema = {
 		templateId: T.string,
 		htmlContent: T.string,
 		color: T.string,
+		miyagiStorage: T.optional(T.dict(T.string, T.string)), // Add miyagiStorage as optional dictionary
 	},
 	// migrations property is optional, can be omitted for simple shapes
+}
+
+// Univer shape schema for embedded spreadsheets/docs
+const univerShapeSchema = {
+	props: {
+		w: T.number,
+		h: T.number,
+		univerType: T.literalEnum('sheets', 'docs', 'slides'),
+		univerData: T.optional(T.any),
+	},
 }
 
 // Block mode shapes
@@ -49,6 +61,7 @@ const schema = createTLSchema({
 	shapes: { 
 		...defaultShapeSchemas,
 		'miyagi-widget': miyagiWidgetShapeSchema,
+		'univer': univerShapeSchema,
 		'widget-block': widgetBlockShapeSchema,
 		'freeform-block': freeformBlockShapeSchema,
 	},
@@ -69,6 +82,8 @@ export class TldrawDurableObject {
 	// when we load the room from the R2 bucket, we keep it here. it's a promise so we only ever
 	// load it once.
 	private roomPromise: Promise<TLSocketRoom<TLRecord, void>> | null = null
+	// Canvas tool handler for clean separation
+	private canvasToolHandler: CanvasToolHandler
 
 	constructor(
 		private readonly ctx: DurableObjectState,
@@ -77,6 +92,9 @@ export class TldrawDurableObject {
 		this.r2 = env.TLDRAW_BUCKET
 		// TEMPORARILY DISABLED FOR TESTING
 		// this.miyagiApiUrl = env.MIYAGI_API_URL || 'http://localhost:3001'
+
+		// Initialize canvas tool handler
+		this.canvasToolHandler = new CanvasToolHandler(() => this.getRoom())
 
 		ctx.blockConcurrencyWhile(async () => {
 			this.roomId = ((await this.ctx.storage.get('roomId')) ?? null) as string | null
@@ -98,6 +116,23 @@ export class TldrawDurableObject {
 				})
 			}
 			return this.handleConnect(request)
+		})
+
+		// Canvas tool routes - each tool has its own route
+		.get('/api/canvas/:roomId/get-pages', async (request) => {
+			return this.canvasToolHandler.handleGetPages(request)
+		})
+		.get('/api/canvas/:roomId/get-widgets', async (request) => {
+			return this.canvasToolHandler.handleGetWidgets(request)
+		})
+		.post('/api/canvas/:roomId/add-widget', async (request) => {
+			return this.canvasToolHandler.handleAddWidget(request)
+		})
+		.put('/api/canvas/:roomId/edit-widget/:shapeId', async (request) => {
+			return this.canvasToolHandler.handleEditWidgetHtml(request)
+		})
+		.post('/api/canvas/:roomId/generate-widget', async (request) => {
+			return this.canvasToolHandler.handleGenerateWidget(request)
 		})
 
 	// `fetch` is the entry point for all requests to the Durable Object
@@ -210,4 +245,5 @@ export class TldrawDurableObject {
 	// 		return { valid: false }
 	// 	}
 	// }
+
 }
