@@ -134,14 +134,25 @@ export class CanvasToolHandler {
         pageId?: string
         position?: { x: number; y: number }
         size?: { w: number; h: number }
+        htmlContent?: string
       }
 
-      const { templateId, pageId, position, size } = body
+      const { templateId, pageId, position, size, htmlContent } = body
 
       if (!templateId) {
         return new Response(JSON.stringify({
           success: false,
           error: 'Missing templateId'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      if (!htmlContent) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Missing htmlContent - template HTML must be provided'
         }), {
           status: 400,
           headers: { 'Content-Type': 'application/json' }
@@ -154,9 +165,6 @@ export class CanvasToolHandler {
       const shapeId = `shape:${this.generateId()}`
       const widgetId = `${templateId}_${Date.now()}`
       const targetPageId = pageId || 'page:page'
-
-      // Get template HTML (for now, use basic template)
-      const htmlContent = await this.getTemplateHtml(templateId)
 
       // Create new miyagi-widget shape (cast to proper type)
       const newShape = {
@@ -470,27 +478,6 @@ export class CanvasToolHandler {
   private generateId(): string {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
   }
-
-  private async getTemplateHtml(templateId: string): Promise<string> {
-    try {
-      // Call the main API to get the actual template
-      const response = await fetch(`http://localhost:3001/api/canvas/templates/${templateId}`)
-      
-      if (!response.ok) {
-        throw new Error(`Template not found: ${templateId}`)
-      }
-      
-      const data = await response.json() as any
-      return data.template.htmlContent
-      
-    } catch (error) {
-      console.error('Failed to load template:', templateId, error)
-      // Return minimal fallback
-      return `<div style="padding: 20px; background: #f8f9fa; border-radius: 8px;"><h3>${templateId}</h3><p>Template loading failed</p></div>`
-    }
-  }
-
-
 
   private processTemplate(htmlContent: string, context: { widgetId: string; miyagiStorage: Record<string, string> }): string {
     // Replace {{miyagi-storage:key}} placeholders with actual values

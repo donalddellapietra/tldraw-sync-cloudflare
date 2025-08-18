@@ -1,7 +1,7 @@
 # Canvas Tools Integration Progress
 
 ## Summary
-Successfully implemented direct backend canvas manipulation via Cloudflare Worker, eliminating the complex frontend-backend SSE communication that was timing out.
+Successfully implemented direct backend canvas manipulation via Cloudflare Worker, eliminating the complex frontend-backend SSE communication that was timing out. **UPDATED**: Now using centralized `/api/canvas/canvas-tools` route that handles template fetching and provides auto-detection of default pages.
 
 ## What We Built
 
@@ -15,18 +15,27 @@ Successfully implemented direct backend canvas manipulation via Cloudflare Worke
 - **edit_widget_html** - Shape lookup fixed, needs testing when server is up
 - **generate_widget** - Not tested yet
 
-### 🎯 **Proven Working Example**
-```typescript
-// Complete workflow example:
-const myToolCall = { fields: ['templateId'] };
-const response = await canvasToolManager.callTool('get_pages', {});
-// Returns: { pages: [...], defaultPage: "page:qfWbqQKvmvkUKz_yMjJgo" }
+### 🎯 **Proven Working Example - NEW CENTRALIZED ROUTE**
+```bash
+# Using the new centralized route (replaces CanvasToolManager):
 
-const widgets = await canvasToolManager.callTool('get_widgets', { 
-  pageId: response.defaultPage, 
-  fields: ['templateId', 'position'] 
-});
-// Returns: { widgets: [...] }
+# Add widget with auto-detected default page
+curl -X POST http://localhost:3001/api/canvas/canvas-tools \
+  -H "Content-Type: application/json" \
+  -d '{"tool": "add_widget", "roomId": "room-vvfayeja39p", "params": {"templateId": "notepad", "position": {"x": 700, "y": 500}}}'
+# Returns: { "success": true, "shapeId": "shape:...", "widgetId": "notepad_...", "templateId": "notepad" }
+
+# Update widget storage
+curl -X POST http://localhost:3001/api/canvas/canvas-tools \
+  -H "Content-Type: application/json" \
+  -d '{"tool": "update_widget_storage", "roomId": "room-vvfayeja39p", "params": {"shapeId": "shape:...", "storageData": {"notepad-content": "Hello World!"}, "merge": true}}'
+# Returns: { "success": true, "updatedKeys": ["notepad-content"] }
+
+# Get widgets with storage
+curl -X POST http://localhost:3001/api/canvas/canvas-tools \
+  -H "Content-Type: application/json" \
+  -d '{"tool": "get_widgets", "roomId": "room-vvfayeja39p", "params": {"fields": ["templateId", "miyagiStorage"]}}'
+# Returns: { "widgets": [{"templateId": "notepad", "miyagiStorage": {"notepad-content": "Hello World!"}}] }
 ```
 
 ## Issues Overcome
@@ -39,12 +48,14 @@ const widgets = await canvasToolManager.callTool('get_widgets', {
 **Problem**: `snapshot.documents[0].state` was accessing document properties, not shapes
 **Solution**: Use `snapshot.documents.map(doc => doc.state)` to get all records, then filter by `typeName === 'shape'`
 
-### 3. **Invalid Default Page**
+### 3. **Invalid Default Page** - SOLVED
 **Problem**: Using `page:page` as default doesn't work - widgets added but not visible
 **Solution**: 
 - Added `get_pages` endpoint to discover actual page IDs
-- Required `pageId` parameter for `add_widget` 
+- **NEW**: Implemented auto-detection of default page in centralized route
+- When `pageId` is not provided, automatically calls `get_pages` and uses `defaultPage`
 - Actual page ID: `page:qfWbqQKvmvkUKz_yMjJgo`
+- **Comment added to route**: `// IMPORTANT: page:page does NOT work as default!`
 
 ### 4. **Route Conflicts**
 **Problem**: POST requests treated as GET - "Request with a GET or HEAD method cannot have a body"
@@ -102,9 +113,11 @@ curl -X POST http://localhost:8787/api/canvas/room-vvfayeja39p/add-widget \
 
 **Before**: Backend → SSE → Frontend → Canvas → POST Response → Backend (timeouts)
 **After**: Backend → HTTP → Cloudflare Worker → Direct Canvas Manipulation (immediate)
+**NOW**: Centralized Route (`/api/canvas/canvas-tools`) → Template Fetching → Cloudflare Worker → Canvas (complete)
 
-## Next Steps
-1. Fix PUT request forwarding for edit_widget_html
-2. Test generate_widget
-3. Add update_widget_storage when ready
-4. Update CanvasToolManager to use correct pageIds by default
+## Next Steps ✅ COMPLETED
+1. ✅ **Centralized Route System** - `/api/canvas/canvas-tools` replaces CanvasToolManager
+2. ✅ **Template Fetching** - Templates fetched from main API, not hardcoded in worker
+3. ✅ **Auto-page Detection** - Default page automatically detected when pageId not provided
+4. ✅ **Complete Tool Suite** - get_pages, get_widgets, add_widget, update_widget_storage all working
+5. 🔄 **Remaining**: Test edit_widget_html and generate_widget tools
