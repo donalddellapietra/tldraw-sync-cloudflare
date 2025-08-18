@@ -131,6 +131,9 @@ export class TldrawDurableObject {
 		.put('/api/canvas/:roomId/edit-widget/:shapeId', async (request) => {
 			return this.canvasToolHandler.handleEditWidgetHtml(request)
 		})
+		.put('/api/canvas/:roomId/update-storage/:shapeId', async (request) => {
+			return this.canvasToolHandler.handleUpdateWidgetStorage(request)
+		})
 		.post('/api/canvas/:roomId/generate-widget', async (request) => {
 			return this.canvasToolHandler.handleGenerateWidget(request)
 		})

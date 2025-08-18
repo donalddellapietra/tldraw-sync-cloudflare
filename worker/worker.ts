@@ -58,6 +58,15 @@ const router = AutoRouter<IRequest, [env: Env, ctx: ExecutionContext]>({
 			body: request.body
 		}))
 	})
+	.put('/api/canvas/:roomId/update-storage/:shapeId', (request, env) => {
+		const id = env.TLDRAW_DURABLE_OBJECT.idFromName(request.params.roomId)
+		const room = env.TLDRAW_DURABLE_OBJECT.get(id)
+		return room.fetch(new Request(request.url, {
+			method: request.method,
+			headers: request.headers,
+			body: request.body
+		}))
+	})
 
 	// assets can be uploaded to the bucket under /uploads:
 	.post('/api/uploads/:uploadId', handleAssetUpload)

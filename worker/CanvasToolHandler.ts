@@ -294,6 +294,88 @@ export class CanvasToolHandler {
   }
 
   /**
+   * Tool 5: Update Widget Storage - Updates the miyagiStorage property of a widget
+   */
+  async handleUpdateWidgetStorage(request: IRequest): Promise<Response> {
+    try {
+      const shapeId = request.params.shapeId
+      const body = await request.json() as {
+        storageData: Record<string, string>
+        merge?: boolean
+      }
+
+      const { storageData, merge } = body
+
+      if (!storageData) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Missing storageData'
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      const room = await this.getRoom()
+      const snapshot = room.getCurrentSnapshot()
+      
+      // Access records correctly - each document in the snapshot is a single record
+      const allRecords = snapshot.documents.map(doc => doc.state)
+      
+      // Find the shape
+      const shape = allRecords.find((record: any) => 
+        record.id === shapeId && 
+        record.typeName === 'shape' && 
+        record.type === 'miyagi-widget'
+      ) as any
+
+      if (!shape || shape.type !== 'miyagi-widget') {
+        return new Response(JSON.stringify({
+          success: false,
+          error: `Widget shape not found: ${shapeId}`
+        }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      // Update miyagiStorage
+      const currentStorage = shape.props.miyagiStorage || {}
+      const newStorage = merge ? { ...currentStorage, ...storageData } : storageData
+
+      // Update the shape
+      const updatedShape = {
+        ...shape,
+        props: {
+          ...shape.props,
+          miyagiStorage: newStorage
+        }
+      }
+
+      await room.updateStore((store) => {
+        store.put(updatedShape)
+      })
+
+      return new Response(JSON.stringify({
+        success: true,
+        updatedKeys: Object.keys(storageData)
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+    } catch (error) {
+      console.error('Update widget storage error:', error)
+      return new Response(JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+  }
+
+  /**
    * Tool 3: Generate Widget - Generates a new widget using AI (basic implementation)
    */
   async handleGenerateWidget(request: IRequest): Promise<Response> {
@@ -319,7 +401,7 @@ export class CanvasToolHandler {
       }
 
       // Basic AI generation (for now, create a simple HTML based on prompt)
-      const htmlContent = this.generateBasicWidget(prompt)
+      const htmlContent = `<div style="padding: 20px; background: #f8f9fa; border-radius: 8px;"><h3>Generated Widget</h3><p>${prompt}</p></div>`
       const templateId = 'generated-widget'
 
       const result: any = {
@@ -390,29 +472,25 @@ export class CanvasToolHandler {
   }
 
   private async getTemplateHtml(templateId: string): Promise<string> {
-    // Basic templates for now
-    const templates: Record<string, string> = {
-      timer: '<div style="padding: 20px; background: #f0f0f0; border-radius: 8px;"><h3>Timer Widget</h3><div>00:00</div></div>',
-      notepad: '<div style="padding: 20px; background: #fff; border: 1px solid #ddd; border-radius: 8px;"><h3>Notepad</h3><textarea style="width: 100%; height: 100px; border: none; resize: none;" placeholder="{{miyagi-storage:notepad-content}}"></textarea></div>',
-      clock: '<div style="padding: 20px; background: #333; color: white; border-radius: 8px; text-align: center;"><h3>Clock</h3><div id="clock-time">12:00 PM</div></div>',
-      weather: '<div style="padding: 20px; background: linear-gradient(135deg, #74b9ff, #0984e3); color: white; border-radius: 8px;"><h3>Weather</h3><div>Sunny, 72°F</div></div>'
-    }
-
-    return templates[templateId] || `<div style="padding: 20px; background: #f8f9fa; border-radius: 8px;"><h3>${templateId}</h3><p>Widget content</p></div>`
-  }
-
-  private generateBasicWidget(prompt: string): string {
-    // Very basic AI generation based on keywords in prompt
-    const lowerPrompt = prompt.toLowerCase()
-    
-    if (lowerPrompt.includes('calculator')) {
-      return '<div style="padding: 20px; background: #f8f9fa; border-radius: 8px;"><h3>Calculator</h3><div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 10px;"><button>7</button><button>8</button><button>9</button><button>/</button><button>4</button><button>5</button><button>6</button><button>*</button><button>1</button><button>2</button><button>3</button><button>-</button><button>0</button><button>.</button><button>=</button><button>+</button></div></div>'
-    } else if (lowerPrompt.includes('todo') || lowerPrompt.includes('task')) {
-      return '<div style="padding: 20px; background: #f8f9fa; border-radius: 8px;"><h3>Todo List</h3><div><input type="checkbox"> Task 1</div><div><input type="checkbox"> Task 2</div><div><input type="checkbox"> Task 3</div></div>'
-    } else {
-      return `<div style="padding: 20px; background: #f8f9fa; border-radius: 8px;"><h3>Generated Widget</h3><p>${prompt}</p></div>`
+    try {
+      // Call the main API to get the actual template
+      const response = await fetch(`http://localhost:3001/api/canvas/templates/${templateId}`)
+      
+      if (!response.ok) {
+        throw new Error(`Template not found: ${templateId}`)
+      }
+      
+      const data = await response.json() as any
+      return data.template.htmlContent
+      
+    } catch (error) {
+      console.error('Failed to load template:', templateId, error)
+      // Return minimal fallback
+      return `<div style="padding: 20px; background: #f8f9fa; border-radius: 8px;"><h3>${templateId}</h3><p>Template loading failed</p></div>`
     }
   }
+
+
 
   private processTemplate(htmlContent: string, context: { widgetId: string; miyagiStorage: Record<string, string> }): string {
     // Replace {{miyagi-storage:key}} placeholders with actual values
